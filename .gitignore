@@ -1,23 +1,69 @@
+# TicketBoard Frontend .gitignore
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# ========================================
+# Dependencies
+# ========================================
 /node_modules
 /.pnp
 .pnp.js
+.pnp.loader.mjs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
 
-# testing
+# ========================================
+# Testing
+# ========================================
 /coverage
+.nyc_output/
 
-# production
+# ========================================
+# Production Build
+# ========================================
 /build
 
-# misc
-.DS_Store
+# ========================================
+# Environment Variables
+# ========================================
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# ========================================
+# IDE / Editor
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.eslintcache
+
+# ========================================
+# OS Files
+# ========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ========================================
+# Temporary Files
+# ========================================
+*.tmp
+*.temp
+.cache/
+
+# ========================================
+# Optional: React Scripts
+# ========================================
+# Uncomment if you ejected from Create React App
+# /config
+# /scripts
+
+.gitignore
+.github/
