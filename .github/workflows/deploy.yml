@@ -1,4 +1,4 @@
-name: Build and Push Backend
+name: Build and Push Frontend
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ticketboard-backend
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ticketboard-frontend
 
 jobs:
   build-and-push:
@@ -16,6 +16,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        run: |
+          npm run build
+          echo "📁 Build completed. Contents of dist folder:"
+          ls -la dist/
 
       - name: Login to Docker Hub
         run: |
@@ -28,11 +43,9 @@ jobs:
       - name: Push Docker image
         run: |
           docker push ${{ env.IMAGE_NAME }}:latest
-          echo "✅ Backend image pushed: ${{ env.IMAGE_NAME }}:latest"
+          echo "✅ Frontend image pushed: ${{ env.IMAGE_NAME }}:latest"
 
       - name: Notify deployment ready
         run: |
-          echo "🚀 Backend image built and pushed successfully!"
-          echo "📦 Image: ${{ env.IMAGE_NAME }}:latest"
-          echo "🔧 To deploy, manually trigger the infrastructure workflow:"
-          echo "   https://github.com/infrapilot-tech/ticketboard-infra/actions/workflows/deploy-platform.yml"
+          echo "🎨 Frontend image built and pushed successfully!"
+          echo "🔧 To deploy, manually trigger the infrastructure workflow"
