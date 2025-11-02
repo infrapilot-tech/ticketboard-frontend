@@ -3,74 +3,83 @@ name: Frontend CI/CD
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+
+env:
+  REGISTRY: localhost:5000
+  IMAGE_NAME: ticketboard-frontend
 
 jobs:
-  build-deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
-    env:
-      DOCKER_REGISTRY: ghcr.io # o docker.io para Docker Hub
-      IMAGE_NAME: ticketboard-frontend
-      IMAGE_TAG: latest
-      K8S_NAMESPACE: ticketboard
-
     steps:
-      # 1️⃣ Checkout del repositorio
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Trae todo el historial para mejor cache
 
-      # 2️⃣ Configurar Node.js
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
 
-      # 3️⃣ Instalar dependencias
-      - name: Install dependencies
+      - name: Smart dependency installation
         run: |
-          npm ci   # asegúrate que package-lock.json está sincronizado
+          # Verificar si package-lock.json existe y está actualizado
+          if [ -f "package-lock.json" ] && npm ls --depth=0 >/dev/null 2>&1; then
+            echo "✅ package-lock.json está sincronizado, usando npm ci"
+            npm ci
+          else
+            echo "⚠️  package-lock.json no sincronizado, generando nuevo"
+            rm -rf node_modules package-lock.json
+            npm install
+          fi
 
-      # 4️⃣ Build del proyecto React
-      - name: Build React App
-        run: npm run build
+      - name: Build with environment variables
+        run: |
+          REACT_APP_API_URL=${{ secrets.API_URL }} npm run build
 
-      # 5️⃣ Configurar Docker Buildx
-      - name: Setup Docker Buildx
+      - name: Run tests
+        run: npm test -- --watchAll=false --passWithNoTests
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 6️⃣ Login a Docker Registry (Docker Hub o GHCR)
-      - name: Login Docker
-        uses: docker/login-action@v2
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-to: type=inline
 
-      # 7️⃣ Construir y push de la imagen
-      - name: Build and Push Docker Image
+      - name: Verify image in registry
         run: |
-          docker build \
-            --file Dockerfile \
-            --tag $DOCKER_REGISTRY/${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG \
-            .
-          docker push $DOCKER_REGISTRY/${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
+          curl -s http://${{ env.REGISTRY }}/v2/_catalog | jq .
+          curl -s http://${{ env.REGISTRY }}/v2/${{ env.IMAGE_NAME }}/tags/list | jq .
 
-      # 8️⃣ Configurar kubectl para desplegar (si tu cluster está accesible)
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-
-      - name: Configure kubeconfig
-        if: ${{ secrets.K8S_CONFIG_BASE64 }}
+      - name: Set up Kubeconfig
         run: |
-          echo "${{ secrets.K8S_CONFIG_BASE64 }}" > $HOME/.kube/config
+          mkdir -p ~/.kube
+          echo "${{ secrets.K8S_CONFIG }}" | base64 -d > ~/.kube/config
+          kubectl cluster-info
 
-      # 9️⃣ Desplegar en Kubernetes
-      - name: Deploy to K8s
-        if: ${{ secrets.K8S_CONFIG_BASE64 }}
+      - name: Deploy to Kubernetes
         run: |
-          kubectl create namespace $K8S_NAMESPACE || true
-          kubectl apply -f infra/k8s/frontend-deployment.yaml -n $K8S_NAMESPACE
-          kubectl apply -f infra/k8s/frontend-service.yaml -n $K8S_NAMESPACE
-          kubectl rollout status deployment/ticketboard-frontend -n $K8S_NAMESPACE
+          kubectl set image deployment/frontend-deployment \
+            frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            -n ticketboard --kubeconfig ~/.kube/config
+
+          kubectl rollout status deployment/frontend-deployment \
+            -n ticketboard --timeout=300s --kubeconfig ~/.kube/config
+
+      - name: Verify deployment
+        run: |
+          echo "📦 Pods en el namespace ticketboard:"
+          kubectl get pods -n ticketboard --kubeconfig ~/.kube-config
+
+          echo "🌐 Services en el namespace ticketboard:"
+          kubectl get svc -n ticketboard --kubeconfig ~/.kube/config
