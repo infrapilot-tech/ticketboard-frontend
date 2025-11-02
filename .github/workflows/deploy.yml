@@ -1,10 +1,13 @@
-name: Build and Push Frontend
+name: Build and Push Backend
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ticketboard-backend
 
 jobs:
   build-and-push:
@@ -14,30 +17,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build application
-        run: npm run build
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build Docker image
         run: |
-          docker build -t host.docker.internal:5000/ticketboard-frontend:latest .
+          docker build -t ${{ env.IMAGE_NAME }}:latest .
 
-      - name: Push to local registry
+      - name: Push Docker image
         run: |
-          docker push host.docker.internal:5000/ticketboard-frontend:latest
+          docker push ${{ env.IMAGE_NAME }}:latest
+          echo "✅ Backend image pushed: ${{ env.IMAGE_NAME }}:latest"
 
-      - name: Verify image
+      - name: Notify deployment ready
         run: |
-          echo "✅ Frontend image built and pushed successfully"
-          docker images | grep ticketboard-frontend
+          echo "🚀 Backend image built and pushed successfully!"
+          echo "📦 Image: ${{ env.IMAGE_NAME }}:latest"
+          echo "🔧 To deploy, manually trigger the infrastructure workflow:"
+          echo "   https://github.com/infrapilot-tech/ticketboard-infra/actions/workflows/deploy-platform.yml"
